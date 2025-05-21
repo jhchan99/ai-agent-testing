@@ -3,6 +3,7 @@ from typing import Optional, List, Dict
 from typing_extensions import TypedDict, Any
 from agents import Agent, FunctionTool, RunContextWrapper, function_tool, Runner
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+from agents.handoffs import handoff
 from pydantic import BaseModel
 from pinecone import Pinecone
 import asyncio
@@ -27,6 +28,7 @@ pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index("sworn-pinecone-index")
 now = datetime.now().strftime("%Y-%m-%d")
 
+# =============================== HEALTH AGENT ===============================
 # this agent will have access to officer health data apis
 health_agent = Agent(
     name="Health Agent",
@@ -35,7 +37,8 @@ health_agent = Agent(
     + "The current date and time is"
     + f"{now}"
     + "You are a health agent. You will make calls to the health api to get the officers health data given a date range. Consider the current date and time when making the call."
-    + "You will be given a general query and you will need to determine wchich tools to use, you may need to make multiple calls to different tools to answer the query.",
+    + "You will be given a general query and you will need to determine wchich tools to use, you may need to make multiple calls to different tools to answer the query."
+    + "The preferred format for displaying the data is a table. You will need to format the data into a table.",
     tools=[
         fetch_officer_fitness_data,
         fetch_officer_CAD_data,
@@ -43,7 +46,10 @@ health_agent = Agent(
         fetch_sleep_data,
     ],
 )
+# =============================================================================
 
+
+# =============================== CONTENT AGENT ===============================
 # this agent will use tools and other agents to answer queries
 content_agent = Agent(
     name="Content Agent",
@@ -54,13 +60,18 @@ content_agent = Agent(
     #     InputGuardrail(guardrail_function=homework_guardrail),
     # ],
 )
+# =============================================================================
 
-# triage agent will decide which agent to handoff to
+
+# =============================== TRIAGE AGENT ===============================
+# This agent will decide which agent to handoff to based on the query.
 triage_agent = Agent(
     name="Triage Agent",
-    instructions="You are a triage agent. You will decide which agent to handoff to based on the query.",
+    instructions=RECOMMENDED_PROMPT_PREFIX
+    + "You are a triage agent. You will decide which agent to handoff to based on the query. You may need to make multiple calls to different agents to answer the query.",
     handoffs=[content_agent, health_agent],
 )
+# =============================================================================
 
 
 async def main():
@@ -69,7 +80,7 @@ async def main():
     """
     result = await Runner.run(
         triage_agent,
-        "how has my work calls been affecting my sleep?",
+        "how have my work calls been affecting my sleep during the last week? and what can i do to improve it?",
     )
     print(f"Answer: {result.final_output}")
 
